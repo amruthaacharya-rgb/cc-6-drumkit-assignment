@@ -1,22 +1,31 @@
+
 html {
   font-size: 10px;
-  background: url('./background.jpg') bottom center;
+  background: url('../public/background.jpg') bottom center;
   background-size: cover;
 }
 
-body,html {
+body,
+html {
   margin: 0;
   padding: 0;
   font-family: sans-serif;
 }
 
+.drum-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
 .keys {
   display: flex;
-  flex: 1;
-  min-height: 100vh;
-  align-items: center;
   justify-content: center;
+  flex-wrap: wrap;
 }
+
 
 .key {
   border: .4rem solid black;
@@ -28,7 +37,7 @@ body,html {
   width: 10rem;
   text-align: center;
   color: white;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0, 0, 0, 0.4);
   text-shadow: 0 0 .5rem black;
 }
 
@@ -49,3 +58,37 @@ kbd {
   letter-spacing: .1rem;
   color: #ffc600;
 }
+
+
+.controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background-color: white;
+  text-align: right;
+  padding: 2rem;
+  border-radius: 20px;
+}
+
+
+.controls button {
+  background: black;
+  color: white;
+  padding: 1rem 2rem;
+  margin: 0 1rem;
+  font-size: 1.6rem;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.controls button:hover {
+  background: #333;
+}
+
+.controls button:disabled {
+  background: gray;
+  cursor: not-allowed;
+}
+
