@@ -1,3 +1,1 @@
 ﻿# cc-6-drumkit-assignment
-
-
