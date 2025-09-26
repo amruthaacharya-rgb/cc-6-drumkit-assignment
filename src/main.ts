@@ -13,8 +13,6 @@ let playbackTimeouts: number[] = []; // Array of timeout IDs used during playbac
 let isPlaying = false;
 let playbackIndex = 0; // Current index of note being played in playback
 
-
-
 /** --- Progress Bar --- */
 const progressBar = document.getElementById("progressBar") as HTMLDivElement | null;
 let playbackStartTime = 0; // timestamp when playback starts
@@ -77,6 +75,8 @@ function playSound(e: KeyboardEvent | number, isReplay: boolean = false) {
   audio.play();
 
   if (isRecording && !isReplay && !isPaused) {
+
+    if (recordedNotes.length === 0) startTime = Date.now();
     recordedNotes.push({ keyCode, time: Date.now() - startTime });
   }
 }
@@ -133,18 +133,6 @@ function stopRecording() {
   if (pauseBtn) pauseBtn.textContent = "Pause";
 }
 
-/**
- * Trim leading silence from the recording.
- */
-function trimRecording() {
-  if (recordedNotes.length === 0) return;
-  const firstTime = recordedNotes[0].time;
-  recordedNotes = recordedNotes.map(note => ({
-    keyCode: note.keyCode,
-    time: note.time - firstTime
-  }));
-}
-
 /** --- Playback Functions --- */
 
 /**
@@ -153,7 +141,7 @@ function trimRecording() {
 function startPlayback() {
   if (recordedNotes.length === 0 || isPlaying) return;
 
-  trimRecording();
+  // trimRecording();
   isPlaying = true;
   isPaused = false;
   playbackIndex = 0;
