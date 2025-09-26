@@ -92,3 +92,40 @@ kbd {
   cursor: not-allowed;
 }
 
+/* .progress-container {
+  width: 500px;
+  height: 1rem;
+  background: linear-gradient(90deg, #333, #555);
+  border-radius: 0.5rem;
+  margin-top: 4rem; 
+  overflow: hidden;
+}
+
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ffc600, #ff8c00);
+  border-radius: 0.5rem;
+  transition: width 0.05s linear; 
+} */
+
+.progress-container {
+  width: 500px;
+  height: 1rem;
+  background: linear-gradient(90deg, #333, #555);
+  border-radius: 0.5rem;
+  margin-top: 4rem; 
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ffc600, #ff8c00);
+  border-radius: 0.5rem; 
+  transition: none;     
+}
+
+
+
