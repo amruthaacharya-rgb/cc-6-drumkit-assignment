@@ -1,74 +1,74 @@
-
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>JS Drum Kit</title>
+    <link rel="stylesheet" href="src/style.css" />
+    <link rel="icon" href="https://fav.farm/✅" />
+    <script type="module" src="src/main.ts"></script>
+  </head>
 
-<head>
-  <meta charset="UTF-8">
-  <title>JS Drum Kit</title>
-  <link rel="stylesheet" href="src/style.css">
-  <link rel="icon" href="https://fav.farm/✅" />
-  <script type="module" src="src/main.ts"></script>
-</head>
+  <body>
+    <div class="drum-container">
+      <div class="keys">
+        <div data-key="65" class="key">
+          <kbd>A</kbd>
+          <span class="sound">clap</span>
+        </div>
+        <div data-key="83" class="key">
+          <kbd>S</kbd>
+          <span class="sound">hihat</span>
+        </div>
+        <div data-key="68" class="key">
+          <kbd>D</kbd>
+          <span class="sound">kick</span>
+        </div>
+        <div data-key="70" class="key">
+          <kbd>F</kbd>
+          <span class="sound">openhat</span>
+        </div>
+        <div data-key="71" class="key">
+          <kbd>G</kbd>
+          <span class="sound">boom</span>
+        </div>
+        <div data-key="72" class="key">
+          <kbd>H</kbd>
+          <span class="sound">ride</span>
+        </div>
+        <div data-key="74" class="key">
+          <kbd>J</kbd>
+          <span class="sound">snare</span>
+        </div>
+        <div data-key="75" class="key">
+          <kbd>K</kbd>
+          <span class="sound">tom</span>
+        </div>
+        <div data-key="76" class="key">
+          <kbd>L</kbd>
+          <span class="sound">tink</span>
+        </div>
+        <div class="controls">
+          <button id="startBtn">Record</button>
+          <button id="pauseBtn">Pause</button>
+          <button id="stopBtn">Stop</button>
+          <button id="playBtn">Play Recording</button>
 
-<body>
-  <div class="drum-container">
-    <div class="keys">
-      <div data-key="65" class="key">
-        <kbd>A</kbd>
-        <span class="sound">clap</span>
+          <!-- Progress Bar inside the controls box -->
+          <div class="progress-container">
+            <div class="progress-bar" id="progressBar"></div>
+          </div>
+        </div>
       </div>
-      <div data-key="83" class="key">
-        <kbd>S</kbd>
-        <span class="sound">hihat</span>
-      </div>
-      <div data-key="68" class="key">
-        <kbd>D</kbd>
-        <span class="sound">kick</span>
-      </div>
-      <div data-key="70" class="key">
-        <kbd>F</kbd>
-        <span class="sound">openhat</span>
-      </div>
-      <div data-key="71" class="key">
-        <kbd>G</kbd>
-        <span class="sound">boom</span>
-      </div>
-      <div data-key="72" class="key">
-        <kbd>H</kbd>
-        <span class="sound">ride</span>
-      </div>
-      <div data-key="74" class="key">
-        <kbd>J</kbd>
-        <span class="sound">snare</span>
-      </div>
-      <div data-key="75" class="key">
-        <kbd>K</kbd>
-        <span class="sound">tom</span>
-      </div>
-      <div data-key="76" class="key">
-        <kbd>L</kbd>
-        <span class="sound">tink</span>
-      </div>
-      <div class="controls">
-        <button id="startBtn">Record</button>
-        <button id="pauseBtn">Pause</button>
-        <button id="stopBtn">Stop</button>
-        <button id="playBtn">Play Recording</button>
-      </div>
-
     </div>
-  </div>
 
-  <audio data-key="65" src="public/sounds/clap.wav"></audio>
-  <audio data-key="83" src="public/sounds/hihat.wav"></audio>
-  <audio data-key="68" src="public/sounds/kick.wav"></audio>
-  <audio data-key="70" src="public/sounds/openhat.wav"></audio>
-  <audio data-key="71" src="public/sounds/boom.wav"></audio>
-  <audio data-key="72" src="public/sounds/ride.wav"></audio>
-  <audio data-key="74" src="public/sounds/snare.wav"></audio>
-  <audio data-key="75" src="public/sounds/tom.wav"></audio>
-  <audio data-key="76" src="public/sounds/tink.wav"></audio>
-
-</body>
-
+    <audio data-key="65" src="public/sounds/clap.wav"></audio>
+    <audio data-key="83" src="public/sounds/hihat.wav"></audio>
+    <audio data-key="68" src="public/sounds/kick.wav"></audio>
+    <audio data-key="70" src="public/sounds/openhat.wav"></audio>
+    <audio data-key="71" src="public/sounds/boom.wav"></audio>
+    <audio data-key="72" src="public/sounds/ride.wav"></audio>
+    <audio data-key="74" src="public/sounds/snare.wav"></audio>
+    <audio data-key="75" src="public/sounds/tom.wav"></audio>
+    <audio data-key="76" src="public/sounds/tink.wav"></audio>
+  </body>
 </html>
