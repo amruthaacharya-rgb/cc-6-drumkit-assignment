@@ -1,253 +1,447 @@
 /**
- * @fileoverview Drum kit recorder and player with pause/resume functionality and progress bar.
- * @author
+ * @fileoverview
+ * Drum Kit Recorder & Playback System
+ * -----------------------------------
+ * Handles recording, saving, playback, and management of drum pad interactions.
+ * Features:
+ *  - Keyboard & click-based drum triggering
+ *  - Track recording with localStorage persistence
+ *  - Playback with progress tracking and UI updates
+ *  - Pausing/resuming recording and playback
  */
 
-/** --- Recording State --- */
-let isRecording = false;
-let isPaused = false;
-let startTime = 0;
-let pauseTime = 0;
-let recordedNotes: { keyCode: number; time: number }[] = [];
-let playbackTimeouts: number[] = []; // Array of timeout IDs used during playback
-let isPlaying = false;
-let playbackIndex = 0; // Current index of note being played in playback
+import { appReducer, type AppState } from "./app-reducer.ts";
+import type { KeyType } from "./app-types";
+import type { SavedTrack } from "./app-types";
+import type { Track } from "./app-types";
+import { createPlayer } from "./player.ts";
+import { createStore } from "./store";
 
-/** --- Progress Bar --- */
-const progressBar = document.getElementById("progressBar") as HTMLDivElement | null;
-let playbackStartTime = 0; // timestamp when playback starts
-let elapsedBeforePause = 0; // total elapsed time before pause
-let progressAnimationFrame: number | null = null;
 
-/** --- Buttons --- */
-const startBtn = document.getElementById("startBtn") as HTMLButtonElement | null;
-const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement | null;
-const stopBtn = document.getElementById("stopBtn") as HTMLButtonElement | null;
-const playBtn = document.getElementById("playBtn") as HTMLButtonElement | null;
-
-setControls(false, true, true, true);
-/** --- Keys --- */
+/** Drum pad key elements */
 const keys = Array.from(document.querySelectorAll<HTMLDivElement>(".key"));
 
+/** Record control buttons */
+const recordStartBtn = document.getElementById("recordStart") as HTMLButtonElement || null;
+const recordStopBtn = document.getElementById("recordStop") as HTMLButtonElement || null;
+
 /**
- * Get the audio element for a given key code.
- * @param {number} keyCode - The key code of the key.
- * @returns {HTMLAudioElement | null} The corresponding audio element or null.
+ * Updates the enabled/disabled state of record control buttons.
+ * @param {boolean} [startEnabled] - Whether the start/record button should be disabled.
+ * @param {boolean} [stopEnabled] - Whether the stop button should be disabled.
  */
-function getAudio(keyCode: number): HTMLAudioElement | null {
-  return document.querySelector<HTMLAudioElement>(`audio[data-key="${keyCode}"]`);
+function setControls(startEnabled?: boolean, stopEnabled?: boolean) {
+  if (recordStartBtn && startEnabled !== undefined) recordStartBtn.disabled = startEnabled;
+  if (recordStopBtn && stopEnabled !== undefined) recordStopBtn.disabled = stopEnabled;
+}
+
+setControls(false, true);
+
+/**
+ * Retrieves the <audio> element associated with a drum key code.
+ * @param {KeyType} keyCode - The key character (e.g., "A", "S").
+ * @returns {HTMLAudioElement | null}
+ */
+function getAudio(keyCode: KeyType) {
+  return document.querySelector<HTMLAudioElement>(
+    `audio[data-key="${keyCode.charCodeAt(0)}"]`
+  );
 }
 
 /**
- * Get the key DOM element for a given key code.
- * @param {number} keyCode - The key code of the key.
- * @returns {HTMLDivElement | null} The corresponding key element or null.
+ * Retrieves the corresponding drum pad <div> element for a given key code.
+ * @param {KeyType} keyCode
+ * @returns {HTMLDivElement | null}
  */
-function getKeyElement(keyCode: number): HTMLDivElement | null {
-  return document.querySelector<HTMLDivElement>(`div[data-key="${keyCode}"]`);
+function getKeyElement(keyCode: KeyType) {
+  return document.querySelector<HTMLDivElement>(
+    `div[data-key="${keyCode.charCodeAt(0)}"]`
+  );
 }
 
 /**
- * Remove the 'playing' class after the key transition ends.
- * @param {TransitionEvent} e - The transition event.
+ * Removes the "playing" visual class after a pad's transition animation ends.
+ * @param {TransitionEvent} e
  */
 function removeTransition(e: TransitionEvent) {
-  if (e.propertyName !== "transform") return;
-  (e.target as HTMLElement).classList.remove("playing");
+  if (e.propertyName !== "transform" || !(e.target instanceof HTMLElement)) return;
+  e.target.classList.remove("playing");
 }
+
 keys.forEach((key) => key.addEventListener("transitionend", removeTransition));
 
 /**
- * Play the sound for a given key.
- * @param {KeyboardEvent | number} e - Keyboard event during recording or keyCode during playback.
- * @param {boolean} [isReplay=false] - Whether the sound is being replayed (during playback).
+ * Plays the drum sample associated with a pad key and triggers its visual animation.
+ * @param {KeyType} key
  */
-function playSound(e: KeyboardEvent | number, isReplay: boolean = false) {
-  const keyCode = isReplay ? (e as number) : (e as KeyboardEvent).keyCode;
-  if (!isReplay && (isPlaying || isPaused)) return;
+function playSound(key: KeyType) {
+  const audio = getAudio(key);
+  const keyEle = getKeyElement(key);
+  if (!audio || !keyEle) return;
 
-  const audio = getAudio(keyCode);
-  const key = getKeyElement(keyCode);
-  if (!audio || !key) return;
-
-  key.classList.add("playing");
+  keyEle.classList.add("playing");
   audio.currentTime = 0;
   audio.play();
-
-  if (isRecording && !isReplay && !isPaused) {
-
-    if (recordedNotes.length === 0) startTime = Date.now();
-    recordedNotes.push({ keyCode, time: Date.now() - startTime });
-  }
 }
 
 /**
- * Enable or disable control buttons.
- * @param {boolean} [start] - Disable start button if true.
- * @param {boolean} [stop] - Disable stop button if true.
- * @param {boolean} [pause] - Disable pause button if true.
- * @param {boolean} [play] - Disable play button if true.
+ * Checks whether playback is currently active.
+ * @returns {boolean}
  */
-function setControls(start?: boolean, stop?: boolean, pause?: boolean, play?: boolean) {
-  if (startBtn && start !== undefined) startBtn.disabled = start;
-  if (stopBtn && stop !== undefined) stopBtn.disabled = stop;
-  if (pauseBtn && pause !== undefined) pauseBtn.disabled = pause;
-  if (playBtn && play !== undefined) playBtn.disabled = play;
+function isPlaybackActive(): boolean {
+  const state = store.getState();
+  return ["playbackStarted", "playbackProgress", "playbackResumed"].includes(state.mode);
 }
 
-/** --- Recording Functions --- */
+/** Keyboard and click handlers for live drumming and recording */
+window.addEventListener("keydown", (e: KeyboardEvent) => {
+  if (isPlaybackActive()) return;
+  const key = e.key.toUpperCase() as KeyType;
+  playSound(key);
+  recordAudioUnit(key);
+});
+
+keys.forEach((key) =>
+  key.addEventListener("click", () => {
+    if (isPlaybackActive()) return;
+    const keyCode = key.dataset.key as KeyType;
+    playSound(keyCode);
+    recordAudioUnit(keyCode);
+  })
+);
+
+/** Redux-like store initialization */
+const initialState: AppState = { mode: "normal", tracks: [], currentTrack: -1 };
+const store = createStore(initialState, appReducer);
+store.subscribe(() => console.log("Mode:", store.getState().mode));
+
+/** Start time of the current drum recording session */
+let recordingStartTime: number | null = null;
 
 /**
- * Start recording keyboard input.
+ * Stops all ongoing drum track playbacks and unsubscribes their listeners.
  */
-function startRecording() {
-  isRecording = true;
-  isPaused = false;
-  startTime = Date.now();
-  recordedNotes = [];
-  setControls(true, false, false, true);
+function stopAllPlayback() {
+  Object.keys(trackPlayers).forEach(i => {
+    trackPlayers[Number(i)]?.stop();
+  });
+  store.dispatch({ type: "stopPlayback" });
+  updateSavedTracksUI();
 }
 
-/**
- * Pause or resume recording.
- */
-function pauseRecording() {
-  if (!isPaused) {
-    isPaused = true;
-    pauseTime = Date.now() - startTime;
-    if (pauseBtn) pauseBtn.textContent = "Resume";
-  } else {
-    isPaused = false;
-    startTime = Date.now() - pauseTime;
-    if (pauseBtn) pauseBtn.textContent = "Pause";
-  }
-}
+/** Handle "Record / Pause / Resume" button click */
+recordStartBtn?.addEventListener("click", () => {
+  const state = store.getState();
 
-/**
- * Stop recording.
- */
-function stopRecording() {
-  isRecording = false;
-  isPaused = false;
-  setControls(false, true, true, recordedNotes.length === 0);
-  if (pauseBtn) pauseBtn.textContent = "Pause";
-}
-
-/** --- Playback Functions --- */
-
-/**
- * Start playback of the recorded notes.
- */
-function startPlayback() {
-  if (recordedNotes.length === 0 || isPlaying) return;
-
-  // trimRecording();
-  isPlaying = true;
-  isPaused = false;
-  playbackIndex = 0;
-  elapsedBeforePause = 0;
-  playbackStartTime = Date.now();
-
-  setControls(true, false, false, true);
-  updateProgress();
-  playNext();
-}
-
-/**
- * Pause or resume playback.
- */
-function pausePlayback() {
-  if (!isPaused) {
-    // Pause
-    isPaused = true;
-    playbackTimeouts.forEach(clearTimeout);
-    playbackTimeouts = [];
-    if (progressAnimationFrame) cancelAnimationFrame(progressAnimationFrame);
-
-    elapsedBeforePause += Date.now() - playbackStartTime;
-
-    if (pauseBtn) pauseBtn.textContent = "Resume";
-  } else {
-    // Resume
-    isPaused = false;
-    playbackStartTime = Date.now();
-    if (pauseBtn) pauseBtn.textContent = "Pause";
-    updateProgress();
-    playNext();
-  }
-}
-
-/**
- * Stop playback.
- */
-function stopPlayback() {
-  isPlaying = false;
-  isPaused = false;
-  playbackTimeouts.forEach(clearTimeout);
-  playbackTimeouts = [];
-  playbackIndex = 0;
-  elapsedBeforePause = 0;
-  setControls(false, true, true, recordedNotes.length === 0);
-  if (pauseBtn) pauseBtn.textContent = "Pause";
-  if (progressAnimationFrame) cancelAnimationFrame(progressAnimationFrame);
-  if (progressBar) progressBar.style.width = "0%";
-}
-
-/**
- * Play the next note in the recorded sequence.
- */
-function playNext() {
-  if (!isPlaying || isPaused || playbackIndex >= recordedNotes.length) {
-    stopPlayback();
-    return;
+  if (["playbackStarted", "playbackProgress", "playbackResumed"].includes(state.mode)) {
+    stopAllPlayback();
   }
 
   const now = Date.now();
-  const note = recordedNotes[playbackIndex];
+  setControls(false, false);
 
-  const elapsed = elapsedBeforePause + (now - playbackStartTime);
-  const delay = Math.max(0, note.time - elapsed);
+  switch (state.mode) {
+    case "normal":
+    case "recordingStopped":
+      recordingStartTime = now;
+      store.dispatch({ type: "startRecording", data: { time: now } });
+      recordStartBtn.textContent = "Pause";
+      break;
 
-  const timeoutId = setTimeout(() => {
-    if (!isPlaying || isPaused) return;
-    playSound(note.keyCode, true);
-    playbackIndex++;
-    playNext();
-  }, delay);
+    case "recordingPaused":
+      store.dispatch({ type: "resumeRecording", data: { time: now } });
+      recordStartBtn.textContent = "Pause";
+      break;
 
-  playbackTimeouts.push(timeoutId);
+    case "recordingStarted":
+    case "recordingProgress":
+      store.dispatch({ type: "pauseAudioRecording", data: { time: now } });
+      recordStartBtn.textContent = "Resume";
+      break;
+  }
+});
+
+/** Handle stop recording and save drum track */
+recordStopBtn?.addEventListener("click", () => {
+  const state = store.getState();
+
+  if (!["recordingStarted", "recordingProgress", "recordingPaused"].includes(state.mode)) return;
+
+  store.dispatch({ type: "stopAudioRecording" });
+  setControls(false, true);
+
+  const currentTrack = state.tracks[state.currentTrack];
+  if (!currentTrack) return alert("No track to save!");
+
+  if (!currentTrack.audioUnits || currentTrack.audioUnits.length === 0) {
+    alert("Recording discarded — no keys were pressed!");
+    recordingStartTime = null;
+    recordStartBtn.textContent = "Record";
+    updateSavedTracksUI();
+    return;
+  }
+
+  const saved: SavedTrack[] = JSON.parse(localStorage.getItem("savedTracks") || "[]");
+  const trackName = prompt("Enter a name for this track:", `Track ${saved.length + 1}`)?.trim();
+  if (!trackName) {
+    recordingStartTime = null;
+    updateSavedTracksUI();
+    return;
+  }
+
+  saved.push({
+    name: trackName,
+    track: { ...currentTrack, audioUnits: currentTrack.audioUnits.map(u => ({ ...u })) },
+    duration: getTrackDuration(currentTrack)
+  });
+
+  localStorage.setItem("savedTracks", JSON.stringify(saved));
+  alert(`Track "${trackName}" saved! Duration: ${getTrackDuration(currentTrack)}`);
+
+  recordingStartTime = null;
+  recordStartBtn.textContent = "Record";
+
+  initSavedTracksUI();
+  updateSavedTracksUI();
+});
+
+/**
+ * Records an individual drum hit during recording mode.
+ * @param {KeyType} key - Key or pad hit.
+ */
+function recordAudioUnit(key: KeyType) {
+  const { mode, currentTrack } = store.getState();
+  if (!["recordingStarted", "recordingProgress"].includes(mode) || recordingStartTime === null || currentTrack < 0) return;
+  store.dispatch({ type: "recordAudioUnit", data: { keyCode: key, relativeTime: Date.now() - recordingStartTime } });
 }
 
 /**
- * Update the playback progress bar.
+ * Computes the duration of a drum track in mm:ss format.
+ * @param {Track} track
+ * @returns {string}
  */
-function updateProgress() {
-  if (!progressBar) return;
-
-  const totalDuration = recordedNotes[recordedNotes.length - 1]?.time || 0;
-  if (totalDuration === 0) return;
-
-  const elapsed = elapsedBeforePause + (isPlaying && !isPaused ? (Date.now() - playbackStartTime) : 0);
-  let percent = (elapsed / totalDuration) * 100;
-
-  if (percent > 100 || playbackIndex >= recordedNotes.length) percent = 100;
-  progressBar.style.width = percent + "%";
-
-  if (percent < 100) {
-    progressAnimationFrame = requestAnimationFrame(updateProgress);
-  }
+function getTrackDuration(track: Track): string {
+  if (!track.audioUnits.length) return "00:00";
+  const lastTime = Math.max(...track.audioUnits.map(u => "relativeTime" in u ? u.relativeTime : u.endTime - u.startTime));
+  return `${String(Math.floor(lastTime / 60000)).padStart(2, "0")}:${String(Math.floor((lastTime % 60000) / 1000)).padStart(2, "0")}`;
 }
 
-/** --- Event Listeners --- */
-window.addEventListener("keydown", playSound);
+/** Track playback players mapped by index */
+const trackPlayers: Record<number, ReturnType<typeof createPlayer>> = {};
 
-startBtn?.addEventListener("click", startRecording);
-pauseBtn?.addEventListener("click", () => {
-  if (isRecording) pauseRecording();
-  else if (isPlaying) pausePlayback();
-});
-stopBtn?.addEventListener("click", () => {
-  if (isRecording) stopRecording();
-  if (isPlaying) stopPlayback();
-});
-playBtn?.addEventListener("click", startPlayback);
+/** Saved drum tracks container element */
+const savedTracksContainer = document.getElementById("savedTracksList");
+let currentPlayingIndex: number | null = null;
+
+/**
+ * Handles play/pause toggle for a saved drum track.
+ * Manages subscription cleanup and UI updates.
+ * @param {number} index - Track index in savedTracks.
+ */
+function handlePlayTrack(index: number) {
+  const saved: SavedTrack[] = JSON.parse(localStorage.getItem("savedTracks") || "[]");
+  const track = saved[index]?.track;
+  if (!track) return;
+  // Stop all other playbacks
+  Object.entries(trackPlayers).forEach(([i, p]) => {
+    const idx = Number(i);
+    if (idx !== index) {
+      p.stop();
+      if ((p as any)._unsubscribe) {
+        (p as any)._unsubscribe();
+        delete (p as any)._unsubscribe;
+      }
+    }
+  });
+
+  let player = trackPlayers[index];
+  if (!player) {
+    player = createPlayer(track, playSound as (key: any) => void);
+    trackPlayers[index] = player;
+  }
+
+  if ((player as any)._unsubscribe) {
+    (player as any)._unsubscribe();
+    delete (player as any)._unsubscribe;
+  }
+
+  const unsubscribe = player.subscribe((progress, completed) => {
+    const pb = document.getElementById(`progress-${index}`) as HTMLProgressElement;
+    if (pb) {
+      pb.style.display = "block";
+      pb.value = Math.min(progress * 100, 100);
+    }
+    if (completed) {
+      if (pb) {
+        pb.style.display = "none";
+        pb.value = 0;
+      }
+      store.dispatch({ type: "stopPlayback" });
+      updateSavedTracksUI();
+    }
+  });
+  (player as any)._unsubscribe = unsubscribe;
+
+  player.toggle();
+  store.dispatch({ type: "startPlayback", data: { trackNumber: index } });
+  updateSavedTracksUI();
+}
+
+/**
+ * Stops a specific drum track's playback and cleans up subscription.
+ * @param {number} index
+ * @param {HTMLButtonElement} [btn]
+ */
+function handleStopTrack(index: number, btn?: HTMLButtonElement) {
+  const player = trackPlayers[index];
+  if (!player) return;
+  player.stop();
+
+  if ((player as any)._unsubscribe) {
+    (player as any)._unsubscribe();
+    delete (player as any)._unsubscribe;
+  }
+
+  const state = store.getState();
+  if (state.currentTrack === index) {
+    store.dispatch({ type: "stopPlayback" });
+  }
+
+  if (btn) btn.textContent = "▶";
+  currentPlayingIndex = currentPlayingIndex === index ? null : currentPlayingIndex;
+}
+
+/**
+ * Initializes the UI for saved drum tracks and binds play/stop/delete controls.
+ */
+function initSavedTracksUI() {
+  const saved: SavedTrack[] = JSON.parse(localStorage.getItem("savedTracks") || "[]");
+  if (!savedTracksContainer) return;
+
+  savedTracksContainer.innerHTML = "";
+
+  if (saved.length === 0) {
+    const emptyMsg = document.createElement("div");
+    emptyMsg.className = "empty-placeholder";
+    emptyMsg.innerHTML = `
+      <p style="
+        text-align:center;
+        margin-top:3rem;
+        color:#e0d5a1;
+        font-size:1.5rem;
+        font-weight:600;
+        letter-spacing:0.5px;
+      ">
+        🎶 No saved tracks yet! <br> 
+        <span style="font-size:1.2rem; font-weight:400; ">
+          Hit <b style="color:#e48108;">Record</b> and make your first masterpiece.
+        </span>
+      </p>
+    `;
+    savedTracksContainer.appendChild(emptyMsg);
+    return;
+  }
+
+  Object.keys(trackPlayers).forEach(k => delete trackPlayers[Number(k)]);
+  saved.forEach((t, i) => {
+    const trackDiv = document.createElement("div");
+    trackDiv.className = "saved-track";
+    trackDiv.id = `track-${i}`;
+
+    const topDiv = document.createElement("div");
+    topDiv.style.display = "flex";
+    topDiv.style.alignItems = "center";
+    topDiv.style.justifyContent = "space-between";
+
+    const leftDiv = document.createElement("div");
+    leftDiv.style.display = "flex";
+    leftDiv.style.alignItems = "center";
+    leftDiv.style.gap = "0.5rem";
+
+    const startBtn = document.createElement("button");
+    startBtn.id = `play-${i}`;
+    startBtn.className = "start-btn";
+    startBtn.textContent = "▶";
+    startBtn.onclick = () => handlePlayTrack(i);
+
+
+    const stopBtn = document.createElement("button");
+    stopBtn.id = `stop-${i}`;
+    stopBtn.textContent = "■";
+    stopBtn.disabled = true;
+    stopBtn.onclick = () => handleStopTrack(i);
+
+    leftDiv.append(startBtn, stopBtn);
+
+    const infoDiv = document.createElement("div");
+    infoDiv.className = "track-info";
+    infoDiv.innerHTML = `
+      <div class="track-name">${t.name}</div>
+      <div class="track-duration">${t.duration}</div>
+    `;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "delete-btn";
+    deleteBtn.innerHTML = `<i class="fa-solid fa-trash"></i>`;
+    deleteBtn.onclick = () => {
+      if (confirm(`Delete "${t.name}"?`)) {
+        const all = JSON.parse(localStorage.getItem("savedTracks") || "[]");
+        all.splice(i, 1);
+        localStorage.setItem("savedTracks", JSON.stringify(all));
+        initSavedTracksUI();
+        updateSavedTracksUI();
+      }
+    };
+
+    const progressBar = document.createElement("progress");
+    progressBar.id = `progress-${i}`;
+    progressBar.max = 100;
+    progressBar.value = 0;
+    progressBar.className = "track-progress";
+    Object.assign(progressBar.style, {
+      width: "100%",
+      marginTop: "2rem",
+      display: "none"
+    });
+
+    topDiv.append(leftDiv, infoDiv, deleteBtn);
+    trackDiv.append(topDiv, progressBar);
+    savedTracksContainer.appendChild(trackDiv);
+
+  });
+
+  saved.forEach((t, i) => {
+    trackPlayers[i] = createPlayer(t.track, playSound);
+  });
+}
+
+/**
+ * Synchronizes playback and control button states with the current app state.
+ */
+function updateSavedTracksUI() {
+  const state = store.getState();
+  const saved: SavedTrack[] = JSON.parse(localStorage.getItem("savedTracks") || "[]");
+
+  saved.forEach((_, i) => {
+    const startBtn = document.getElementById(`play-${i}`) as HTMLButtonElement | null;
+    const stopBtn = document.getElementById(`stop-${i}`) as HTMLButtonElement | null;
+    const progressBar = document.getElementById(`progress-${i}`) as HTMLProgressElement | null;
+
+    if (!startBtn || !stopBtn || !progressBar) return;
+
+    const isActive = state.currentTrack === i;
+    const playing = ["playbackStarted", "playbackResumed", "playbackProgress"].includes(state.mode);
+    const paused = state.mode === "playbackPaused";
+
+    startBtn.textContent = isActive && playing ? "⏸" : "▶";
+    stopBtn.disabled = !(isActive && (playing || paused));
+    progressBar.style.display = isActive && (playing || paused) ? "block" : "none";
+  });
+}
+
+// Initialize saved beat list and subscribe to UI updates
+initSavedTracksUI();
+updateSavedTracksUI();
+
+store.subscribe(updateSavedTracksUI);
+
