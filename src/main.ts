@@ -1,65 +1,71 @@
+/**
+ * @fileoverview Drum kit recorder and player with pause/resume functionality and progress bar.
+ * @author
+ */
+
+/** --- Recording State --- */
 let isRecording = false;
 let isPaused = false;
 let startTime = 0;
 let pauseTime = 0;
 let recordedNotes: { keyCode: number; time: number }[] = [];
-let playbackTimeouts: number[] = [];
+let playbackTimeouts: number[] = []; // Array of timeout IDs used during playback
 let isPlaying = false;
-let playbackIndex = 0;
+let playbackIndex = 0; // Current index of note being played in playback
 
-// --- Button existence checks ---
+/** --- Progress Bar --- */
+const progressBar = document.getElementById("progressBar") as HTMLDivElement | null;
+let playbackStartTime = 0; // timestamp when playback starts
+let elapsedBeforePause = 0; // total elapsed time before pause
+let progressAnimationFrame: number | null = null;
+
+/** --- Buttons --- */
 const startBtn = document.getElementById("startBtn") as HTMLButtonElement | null;
 const pauseBtn = document.getElementById("pauseBtn") as HTMLButtonElement | null;
 const stopBtn = document.getElementById("stopBtn") as HTMLButtonElement | null;
 const playBtn = document.getElementById("playBtn") as HTMLButtonElement | null;
 
-// --- Keys ---
+setControls(false, true, true, true);
+/** --- Keys --- */
 const keys = Array.from(document.querySelectorAll<HTMLDivElement>(".key"));
 
-// --- Utility functions ---
 /**
  * Get the audio element for a given key code.
- * @param {number} keyCode - Keyboard key code (e.g., 65 for 'A').
- * @returns {HTMLAudioElement | null} The matching audio element, or null if not found.
+ * @param {number} keyCode - The key code of the key.
+ * @returns {HTMLAudioElement | null} The corresponding audio element or null.
  */
 function getAudio(keyCode: number): HTMLAudioElement | null {
   return document.querySelector<HTMLAudioElement>(`audio[data-key="${keyCode}"]`);
 }
-/**
- * Get the key element (visual button) for a given key code.
- * @param {number} keyCode - Keyboard key code (e.g., 65 for 'A').
- * @returns {HTMLDivElement | null} The matching key div element, or null if not found.
- */
 
+/**
+ * Get the key DOM element for a given key code.
+ * @param {number} keyCode - The key code of the key.
+ * @returns {HTMLDivElement | null} The corresponding key element or null.
+ */
 function getKeyElement(keyCode: number): HTMLDivElement | null {
   return document.querySelector<HTMLDivElement>(`div[data-key="${keyCode}"]`);
 }
 
-// Remove animation class after transition
 /**
- * Remove the 'playing' animation class when transition ends.
- * @param {TransitionEvent} e - Transition event triggered by CSS animation.
+ * Remove the 'playing' class after the key transition ends.
+ * @param {TransitionEvent} e - The transition event.
  */
 function removeTransition(e: TransitionEvent) {
   if (e.propertyName !== "transform") return;
   (e.target as HTMLElement).classList.remove("playing");
 }
-
 keys.forEach((key) => key.addEventListener("transitionend", removeTransition));
 
-// Play a sound
-
 /**
- * Play a sound based on key press or replayed note.
- * @param {KeyboardEvent | number} e - Either:
- *   - `KeyboardEvent` when user presses a key.
- *   - `number` (keyCode) when replaying a recorded note.
- * @param {boolean} [isReplay=false] - Flag indicating if this is a replayed note.
- *   - `false`: User pressed a key.
- *   - `true`: Note is being replayed from recording.
+ * Play the sound for a given key.
+ * @param {KeyboardEvent | number} e - Keyboard event during recording or keyCode during playback.
+ * @param {boolean} [isReplay=false] - Whether the sound is being replayed (during playback).
  */
 function playSound(e: KeyboardEvent | number, isReplay: boolean = false) {
   const keyCode = isReplay ? (e as number) : (e as KeyboardEvent).keyCode;
+  if (!isReplay && (isPlaying || isPaused)) return;
+
   const audio = getAudio(keyCode);
   const key = getKeyElement(keyCode);
   if (!audio || !key) return;
@@ -69,17 +75,18 @@ function playSound(e: KeyboardEvent | number, isReplay: boolean = false) {
   audio.play();
 
   if (isRecording && !isReplay && !isPaused) {
+
+    if (recordedNotes.length === 0) startTime = Date.now();
     recordedNotes.push({ keyCode, time: Date.now() - startTime });
   }
 }
 
-// --- Control functions ---
 /**
- * Enable/disable control buttons.
- * @param {boolean} [start] - If true, disable Start button.
- * @param {boolean} [stop] - If true, disable Stop button.
- * @param {boolean} [pause] - If true, disable Pause button.
- * @param {boolean} [play] - If true, disable Play button.
+ * Enable or disable control buttons.
+ * @param {boolean} [start] - Disable start button if true.
+ * @param {boolean} [stop] - Disable stop button if true.
+ * @param {boolean} [pause] - Disable pause button if true.
+ * @param {boolean} [play] - Disable play button if true.
  */
 function setControls(start?: boolean, stop?: boolean, pause?: boolean, play?: boolean) {
   if (startBtn && start !== undefined) startBtn.disabled = start;
@@ -88,7 +95,11 @@ function setControls(start?: boolean, stop?: boolean, pause?: boolean, play?: bo
   if (playBtn && play !== undefined) playBtn.disabled = play;
 }
 
-/** Start a new recording session. */
+/** --- Recording Functions --- */
+
+/**
+ * Start recording keyboard input.
+ */
 function startRecording() {
   isRecording = true;
   isPaused = false;
@@ -97,7 +108,9 @@ function startRecording() {
   setControls(true, false, false, true);
 }
 
-/** Toggle pause/resume during recording. */
+/**
+ * Pause or resume recording.
+ */
 function pauseRecording() {
   if (!isPaused) {
     isPaused = true;
@@ -110,8 +123,9 @@ function pauseRecording() {
   }
 }
 
-
-/** Stop the current recording session. */
+/**
+ * Stop recording.
+ */
 function stopRecording() {
   isRecording = false;
   isPaused = false;
@@ -119,44 +133,68 @@ function stopRecording() {
   if (pauseBtn) pauseBtn.textContent = "Pause";
 }
 
-/** Start playback of recorded notes. */
+/** --- Playback Functions --- */
+
+/**
+ * Start playback of the recorded notes.
+ */
 function startPlayback() {
   if (recordedNotes.length === 0 || isPlaying) return;
+
+  // trimRecording();
   isPlaying = true;
+  isPaused = false;
   playbackIndex = 0;
+  elapsedBeforePause = 0;
+  playbackStartTime = Date.now();
+
   setControls(true, false, false, true);
+  updateProgress();
   playNext();
 }
 
-/** Toggle pause/resume during playback. */
+/**
+ * Pause or resume playback.
+ */
 function pausePlayback() {
   if (!isPaused) {
+    // Pause
     isPaused = true;
     playbackTimeouts.forEach(clearTimeout);
     playbackTimeouts = [];
+    if (progressAnimationFrame) cancelAnimationFrame(progressAnimationFrame);
+
+    elapsedBeforePause += Date.now() - playbackStartTime;
+
     if (pauseBtn) pauseBtn.textContent = "Resume";
   } else {
+    // Resume
     isPaused = false;
+    playbackStartTime = Date.now();
     if (pauseBtn) pauseBtn.textContent = "Pause";
+    updateProgress();
     playNext();
   }
 }
 
-/** Stop the current playback. */
+/**
+ * Stop playback.
+ */
 function stopPlayback() {
   isPlaying = false;
   isPaused = false;
   playbackTimeouts.forEach(clearTimeout);
   playbackTimeouts = [];
   playbackIndex = 0;
+  elapsedBeforePause = 0;
   setControls(false, true, true, recordedNotes.length === 0);
   if (pauseBtn) pauseBtn.textContent = "Pause";
+  if (progressAnimationFrame) cancelAnimationFrame(progressAnimationFrame);
+  if (progressBar) progressBar.style.width = "0%";
 }
 
-// Play next note in playback
 /**
  * Play the next note in the recorded sequence.
- * Handles timing gaps between notes.
  */
 function playNext() {
   if (!isPlaying || isPaused || playbackIndex >= recordedNotes.length) {
@@ -164,8 +202,11 @@ function playNext() {
     return;
   }
 
+  const now = Date.now();
   const note = recordedNotes[playbackIndex];
-  const delay = playbackIndex === 0 ? note.time : note.time - recordedNotes[playbackIndex - 1].time;
+
+  const elapsed = elapsedBeforePause + (now - playbackStartTime);
+  const delay = Math.max(0, note.time - elapsed);
 
   const timeoutId = setTimeout(() => {
     if (!isPlaying || isPaused) return;
@@ -177,19 +218,36 @@ function playNext() {
   playbackTimeouts.push(timeoutId);
 }
 
-// --- Event listeners ---
+/**
+ * Update the playback progress bar.
+ */
+function updateProgress() {
+  if (!progressBar) return;
+
+  const totalDuration = recordedNotes[recordedNotes.length - 1]?.time || 0;
+  if (totalDuration === 0) return;
+
+  const elapsed = elapsedBeforePause + (isPlaying && !isPaused ? (Date.now() - playbackStartTime) : 0);
+  let percent = (elapsed / totalDuration) * 100;
+
+  if (percent > 100 || playbackIndex >= recordedNotes.length) percent = 100;
+  progressBar.style.width = percent + "%";
+
+  if (percent < 100) {
+    progressAnimationFrame = requestAnimationFrame(updateProgress);
+  }
+}
+
+/** --- Event Listeners --- */
 window.addEventListener("keydown", playSound);
 
 startBtn?.addEventListener("click", startRecording);
-
 pauseBtn?.addEventListener("click", () => {
   if (isRecording) pauseRecording();
   else if (isPlaying) pausePlayback();
 });
-
 stopBtn?.addEventListener("click", () => {
   if (isRecording) stopRecording();
   if (isPlaying) stopPlayback();
 });
-
 playBtn?.addEventListener("click", startPlayback);
